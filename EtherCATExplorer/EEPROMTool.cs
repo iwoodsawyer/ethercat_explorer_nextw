@@ -168,22 +168,25 @@ namespace EtherCATExplorer
             CurrentBuf = new byte[128*256]; // get a big buffer
             int size = 0;
 
+            SoemInterrop.PauseRTthread(); // Pause the cyclical activity
+
             // Read first 128 bytes
-            int ret = SoemInterrop.EEprom_Read(1, 0, 128, CurrentBuf);
+            int ret = slave.ReadEEProm(0, 128, CurrentBuf);
 
             if (ret > 0)
             {
                 // size is at 0x7C, 0x7D. Here I only get the less-significant byte
                 // up to 32Ko of eeprom is certainly never implemented
-                // FIXME if needed
+                // sure up to 4Mb are supported, but such a device really exist ?
                 size = (CurrentBuf[0x7c]+1)*128; // Adjustment
 
                 progress.Maximum = size;
                 progress.Visible = true;
 
+                // Download it in small shots to shows a progress bar
                 for (int s = 128; s < size; s += 128)
                 {
-                    ret = SoemInterrop.EEprom_Read(1, s, 128, CurrentBuf);
+                    ret = slave.ReadEEProm(s, 128, CurrentBuf);
 
                     if (ret <= 0)
                     {
@@ -192,7 +195,11 @@ namespace EtherCATExplorer
                     }
                     progress.Value = s+128;
                     Application.DoEvents();
+
                 }
+
+                SoemInterrop.ResumeRTthread(); // Resume the cyclical activity
+               
             }
 
             progress.Visible = false;
@@ -219,10 +226,75 @@ namespace EtherCATExplorer
                 return;
             }
 
-            if (MessageBox.Show("Are you Really sure to do that", "EtherCAT Explorer", MessageBoxButtons.OKCancel, MessageBoxIcon.Question)
+            if (MessageBox.Show("Are you Really sure to do that ?\r\nA faulty EEPROM can cause problems starting the EtherCAT slave", "EtherCAT Explorer", MessageBoxButtons.OKCancel, MessageBoxIcon.Question)
                 != DialogResult.OK) return;
-            
-            MessageBox.Show("Not yet implemented", "EtherCAT Explorer", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+            CurrentBuf = Display2Buf();
+
+            // Assume that the checksum present in the first bytes is OK
+            // Write by block to shows the progress bar 
+
+            if (!((CurrentBuf.Length > 127) && (CurrentBuf.Length < 32768)))   // we accept files from 128 to 32K bytes
+            {
+                MessageBox.Show("File Bad dimension!", "EtherCAT Explorer", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            int size = (CurrentBuf[0x7c] + 1) * 128;        // check that the value at 0x7C match with the file dimension
+            if (size != (CurrentBuf.Length))
+            {
+                MessageBox.Show("File Bad format!", "EtherCAT Explorer", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            progress.Maximum = size*2;
+            progress.Visible = true;
+
+            SoemInterrop.PauseRTthread();
+
+            // Write
+            for (int s = 0; s < size; s += 128)
+            {
+                int ret = slave.WriteEEProm(s, 128, CurrentBuf);
+                if (ret <= 0)
+                    break;
+
+                progress.Value = s;
+                Application.DoEvents();
+            }
+
+            // Read back
+            byte[] ReadBuf = new byte[size];
+
+            for (int s = 0; s < size; s += 128)
+            {
+                int ret = slave.ReadEEProm(s, 128, ReadBuf);
+
+                if (ret <= 0)
+                    break;
+
+                progress.Value += 128;
+                Application.DoEvents();
+            }
+
+            SoemInterrop.ResumeRTthread();
+            progress.Visible = false;
+
+            // Compare
+            for (int i = 0; i < size; i++)
+            {
+                if (CurrentBuf[i] != ReadBuf[i])
+                {
+                    MessageBox.Show("Error!" +
+                                    "\nAddress 0x" + i.ToString("X2") +
+                                    "\nWritten  0x" + CurrentBuf[i].ToString("X2") +
+                                    "\nRead      0x" + ReadBuf[i].ToString("X2") + " ",
+                                    "EtherCAT Explorer", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+            }
+
+            MessageBox.Show("Done", "EtherCAT Explorer", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         private void button1_Click(object sender, EventArgs e)

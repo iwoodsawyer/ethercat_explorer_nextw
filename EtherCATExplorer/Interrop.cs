@@ -43,6 +43,12 @@ namespace SOEM
         public static extern void Run(SlaveState State = SlaveState.Operational);
 
         [DllImport("SoemWrapper", CallingConvention = CallingConvention.Cdecl)]
+        public static extern void PauseRTthread();
+
+        [DllImport("SoemWrapper", CallingConvention = CallingConvention.Cdecl)]
+        public static extern void ResumeRTthread();
+
+        [DllImport("SoemWrapper", CallingConvention = CallingConvention.Cdecl)]
         public static extern void RefreshSlavesState();
 
         [DllImport("SoemWrapper", CallingConvention = CallingConvention.Cdecl)]

@@ -185,6 +185,16 @@ namespace EtherCATExplorer
         {
             return Name+" - " +Config_Address.ToString();
         }
+
+        public int ReadEEProm(Int32 start, Int32 length, byte[] buf)
+        {
+            return SoemInterrop.EEprom_Read(Id, start, length, buf);
+        }
+
+        public int WriteEEProm(Int32 start, Int32 length, byte[] buf)
+        {
+            return SoemInterrop.EEprom_Write(Id, start, length, buf);
+        }
     }
 
 }
